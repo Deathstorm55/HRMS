@@ -65,25 +65,25 @@
                       </a>
                     </li> -->
                     <li class="nav-header">Master List</li>
-                    <!-- <li class="nav-item dropdown">
-                      <a href="<?php //echo base_url ?>admin/?page=dorms" class="nav-link nav-dorms">
+                    <li class="nav-item dropdown">
+                      <a href="<?php echo base_url ?>admin/?page=dorms" class="nav-link nav-dorms">
                         <i class="nav-icon fas fa-building"></i>
                         <p>
                           Dorm List
                         </p>
                       </a>
-                    </li> -->
-                    <!-- <li class="nav-item dropdown">
+                    </li> 
+                    <li class="nav-item dropdown">
                       <a href="<?php echo base_url ?>admin/?page=rooms" class="nav-link nav-rooms">
                         <i class="nav-icon fas fa-door-closed"></i>
                         <p>
                           List of Rooms
                         </p>
                       </a>
-                    </li> -->
+                    </li>
                     <li class="nav-item dropdown">
                       <a href="<?php echo base_url ?>admin/?page=halls" class="nav-link nav-rooms">
-                        <i class="nav-icon fas fa-door-closed"></i>
+                        <i class="nav-icon fas fa-door-open"></i>
                         <p>
                           List of Halls
                         </p>

@@ -5,10 +5,10 @@
       <div class="info-box">
         <span class="info-box-icon bg-gradient-secondary elevation-1"><i class="fas fa-building"></i></span>
         <div class="info-box-content">
-          <span class="info-box-text">Total Halls</span>
+          <span class="info-box-text">Total Dorms</span>
           <span class="info-box-number text-right">
             <?php 
-              $dorm = $conn->query("SELECT * FROM halls where `delete_flag` = 0 and `status` = 1")->num_rows;
+              $dorm = $conn->query("SELECT * FROM dorm_list where `delete_flag` = 0 and `status` = 1")->num_rows;
               echo format_num($dorm);
             ?>
             <?php ?>
@@ -19,23 +19,23 @@
       <!-- /.info-box -->
     </div>
     <!-- /.col -->
-    <!-- <div class="col-lg-4 col-md-4 col-sm-12 col-xs-12">
+    <div class="col-lg-4 col-md-4 col-sm-12 col-xs-12">
       <div class="info-box">
         <span class="info-box-icon bg-gradient-maroon elevation-1"><i class="fas fa-door-closed"></i></span>
         <div class="info-box-content">
           <span class="info-box-text">Total Rooms</span>
           <span class="info-box-number text-right">
             <?php 
-              // $room = $conn->query("SELECT * FROM student_list")->num_rows;
-              // echo format_num($room);
+              $room = $conn->query("SELECT * FROM room_list where `delete_flag` = 0 and `status` = 1")->num_rows;
+              echo format_num($room);
             ?>
             <?php ?>
           </span>
         </div>
-        </.info-box-content -->
+        <!-- /.info-box-content -->
       </div>
       <!-- /.info-box -->
-    </div> 
+    </div>
     <!-- /.col -->
     <div class="col-lg-4 col-md-4 col-sm-12 col-xs-12">
       <div class="info-box">
@@ -86,9 +86,9 @@
             <?php ?>
           </span>
         </div>
-         /.info-box-content -->
-      <!-- </div> -->
+       /.info-box-content -->
+      </div>
       <!-- /.info-box -->
-    <!-- </div> -->
+    </div> 
     <!-- /.col -->
 </div>

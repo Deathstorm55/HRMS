@@ -34,19 +34,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $emergency_relation = mysqli_real_escape_string($conn, $_POST['emergency_relation']);
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
-
-  
-
-   
+    $student_type = mysqli_real_escape_string($conn, $_POST['student_type']);
+    $room_id = mysqli_real_escape_string($conn, $_POST['room_id']);
+    $roommate_preference = mysqli_real_escape_string($conn, $_POST['roommate_preference']);
+    
     // Validation
     if (empty($code)) $errors[] = "Student code is required";
     if (empty($firstname)) $errors[] = "First name is required";
     if (empty($lastname)) $errors[] = "Last name is required";
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = "Invalid email format";
     if (strlen($contact) < 10) $errors[] = "Invalid contact number";
+    if (empty($student_type)) $errors[] = "Student type is required";
+    if (empty($room_id)) $errors[] = "Room selection is required";
+    if (empty($roommate_preference)) $errors[] = "Roommate preference is required";
     
-      // Add password validation
-      if (empty($password)) {
+    // Add password validation
+    if (empty($password)) {
         $errors[] = "Password is required";
     } elseif (strlen($password) < 8) {
         $errors[] = "Password must be at least 8 characters";
@@ -66,27 +69,33 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Hash password before storing
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
         
-        // Update SQL query to include password
+        // Update SQL query to include new fields
         $sql = "INSERT INTO student_list (
             code, password, firstname, middlename, lastname, department, 
             course, gender, contact, email, address, emergency_name, 
-            emergency_contact, emergency_address, emergency_relation
+            emergency_contact, emergency_address, emergency_relation,
+            student_type, room_id, roommate_preference
         ) VALUES (
             '$code', '$hashed_password', '$firstname', '$middlename', 
             '$lastname', '$department', '$course', '$gender', '$contact', 
             '$email', '$address', '$emergency_name', '$emergency_contact', 
-            '$emergency_address', '$emergency_relation'
+            '$emergency_address', '$emergency_relation', '$student_type',
+            '$room_id', '$roommate_preference'
         )";
 
-if ($conn->query($sql)) {
-    $_SESSION['registration_success'] = true;
-    header("Location: login.php");
-    exit();
-} else {
-    $errors[] = "Error: " . $conn->error;
-}
+        if ($conn->query($sql)) {
+            $_SESSION['registration_success'] = true;
+            header("Location: login.php");
+            exit();
+        } else {
+            $errors[] = "Error: " . $conn->error;
+        }
     }
 }
+
+// Fetch available rooms
+$rooms_query = "SELECT * FROM room_list WHERE status = 1 AND delete_flag = 0";
+$rooms_result = $conn->query($rooms_query);
 ?>
 
 <!DOCTYPE html>
@@ -128,23 +137,29 @@ if ($conn->query($sql)) {
                         <label class="form-label">Student Code</label>
                         <input type="text" class="form-control" name="code" required>
                     </div>
-                    
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Password</label>
-                                <input type="password" class="form-control" name="password" id="password" required>
-                                <div class="form-text">Must contain: 8+ characters, uppercase, lowercase, number, and special character</div>
-                                <div id="password-strength" class="mt-1"></div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Confirm Password</label>
-                                <input type="password" class="form-control" name="confirm_password" required>
-                            </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Student Type</label>
+                        <select class="form-select" name="student_type" id="student_type" required>
+                            <option value="Undergraduate">Undergraduate</option>
+                            <option value="Postgraduate">Postgraduate</option>
+                        </select>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-control" name="password" id="password" required>
+                            <div class="form-text">Must contain: 8+ characters, uppercase, lowercase, number, and special character</div>
+                            <div id="password-strength" class="mt-1"></div>
                         </div>
-                        <div class="form-check mt-2">
-                            <input type="checkbox" class="form-check-input" id="showPassword">
-                            <label class="form-check-label" for="showPassword">Show Passwords</label>
+                        <div class="col-md-6">
+                            <label class="form-label">Confirm Password</label>
+                            <input type="password" class="form-control" name="confirm_password" required>
                         </div>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input type="checkbox" class="form-check-input" id="showPassword">
+                        <label class="form-check-label" for="showPassword">Show Passwords</label>
+                    </div>
                     <div class="col-md-6">
                         <label class="form-label">Gender</label>
                         <select class="form-select" name="gender" required>
@@ -174,7 +189,6 @@ if ($conn->query($sql)) {
                         <select class="form-select" name="department" required>
                             <option value="College of Engineering">College of Engineering</option>
                             <option value="College of Social Science">College of Social Science</option>
-                            <!-- Add more departments as needed -->
                         </select>
                     </div>
                     <div class="col-md-6">
@@ -182,7 +196,30 @@ if ($conn->query($sql)) {
                         <select class="form-select" name="course" required>
                             <option value="Bachelor of Science in Computer Science">BSC Computer Science</option>
                             <option value="Bachelor of Science in Psychology">BSC Psychology</option>
-                            <!-- Add more courses as needed -->
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Room Selection -->
+                <div class="section-title mt-4">Room Selection</div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" id="room_id" required>
+                            <option value="">Select a room</option>
+                            <?php while ($room = $rooms_result->fetch_assoc()): ?>
+                                <option value="<?php echo $room['id']; ?>" 
+                                        data-category="<?php echo $room['category']; ?>">
+                                    <?php echo $room['name'] . ' (' . $room['category'] . ' - $' . $room['price'] . ')'; ?>
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Roommate Preference</label>
+                        <select class="form-select" name="roommate_preference" required>
+                            <option value="Alone">Alone</option>
+                            <option value="With Roommate">With Roommate</option>
                         </select>
                     </div>
                 </div>
@@ -236,36 +273,49 @@ if ($conn->query($sql)) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    // Password strength indicator
+    document.getElementById('password').addEventListener('input', function(e) {
+        const password = e.target.value;
+        const strengthBadge = document.getElementById('password-strength');
+        let strength = 0;
+
+        if (password.match(/[A-Z]/)) strength++;
+        if (password.match(/[a-z]/)) strength++;
+        if (password.match(/[0-9]/)) strength++;
+        if (password.match(/[^A-Za-z0-9]/)) strength++;
+        if (password.length >= 8) strength++;
+
+        const strengthText = ['Very Weak', 'Weak', 'Moderate', 'Strong', 'Very Strong'][strength - 1] || '';
+        const colors = ['#dc3545', '#ffc107', '#ffc107', '#28a745', '#28a745'];
+        
+        strengthBadge.style.color = colors[strength - 1] || '#000';
+        strengthBadge.textContent = strengthText;
+    });
+
+    // Show password toggle
+    document.getElementById('showPassword').addEventListener('change', function(e) {
+        const passwordFields = document.querySelectorAll('input[type="password"]');
+        passwordFields.forEach(field => {
+            field.type = e.target.checked ? 'text' : 'password';
+        });
+    });
+
+    // Filter rooms based on student type
+    document.getElementById('student_type').addEventListener('change', function(e) {
+        const studentType = e.target.value;
+        const roomSelect = document.getElementById('room_id');
+        const options = roomSelect.getElementsByTagName('option');
+
+        for (let option of options) {
+            if (option.value !== '') {
+                const category = option.getAttribute('data-category');
+                option.style.display = (category === studentType + ' Room' || option.value === '') ? 'block' : 'none';
+            }
+        }
+    });
+    </script>
 </body>
 </html>
 
 <?php $conn->close(); ?>
-<script>
-// Password strength indicator
-document.getElementById('password').addEventListener('input', function(e) {
-    const password = e.target.value;
-    const strengthBadge = document.getElementById('password-strength');
-    let strength = 0;
-
-    // Strength criteria
-    if (password.match(/[A-Z]/)) strength++;
-    if (password.match(/[a-z]/)) strength++;
-    if (password.match(/[0-9]/)) strength++;
-    if (password.match(/[^A-Za-z0-9]/)) strength++;
-    if (password.length >= 8) strength++;
-
-    const strengthText = ['Very Weak', 'Weak', 'Moderate', 'Strong', 'Very Strong'][strength - 1] || '';
-    const colors = ['#dc3545', '#ffc107', '#ffc107', '#28a745', '#28a745'];
-    
-    strengthBadge.style.color = colors[strength - 1] || '#000';
-    strengthBadge.textContent = strengthText;
-});
-
-// Show password toggle
-document.getElementById('showPassword').addEventListener('change', function(e) {
-    const passwordFields = document.querySelectorAll('input[type="password"]');
-    passwordFields.forEach(field => {
-        field.type = e.target.checked ? 'text' : 'password';
-    });
-});
-</script>

@@ -54,6 +54,12 @@ if(isset($_GET['id']) && $_GET['id'] > 0){
                             </div>
                             <div class="col-lg-6 col-md-6 col-sm-12 col-xs-12">
                                 <div class="form-group">
+                                    <label for="department" class="control-label">Student Type</label>
+                                    <div class="pl-3"><?php echo isset($student_type) ? $student_type : ''; ?></div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6 col-md-6 col-sm-12 col-xs-12">
+                                <div class="form-group">
                                     <label for="course" class="control-label">Course</label>
                                     <div class="pl-3"><?php echo isset($course) ? $course : ''; ?></div>
                                 </div>

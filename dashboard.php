@@ -2,20 +2,50 @@
 session_start();
 require 'db_config.php';
 
-// Add student_id to guest_bookings table (run once)
-// ALTER TABLE guest_bookings ADD COLUMN student_id INT NOT NULL AFTER booking_id;
-// ALTER TABLE complaints ADD COLUMN complaint_type ENUM('Hall','Staff','Other') NOT NULL AFTER complaint_id;
+// Ensure user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
 
 // Get student info
 $student_id = $_SESSION['user_id'];
 $bookings = [];
-$halls = $conn->query("SELECT * FROM halls");
+
+// Fetch student details including room and price
+$student_stmt = $conn->prepare("
+    SELECT s.code, s.student_type, s.department, s.course, 
+           r.name AS room_name, r.price, d.name AS dorm_name
+    FROM student_list s
+    LEFT JOIN room_list r ON s.room_id = r.id
+    LEFT JOIN dorm_list d ON r.dorm_id = d.id
+    WHERE s.id = ?
+");
+$student_stmt->bind_param("i", $student_id);
+$student_stmt->execute();
+$student = $student_stmt->get_result()->fetch_assoc();
+
+// Get halls (dorms) available for student's type
+$student_type = $student['student_type'];
+$halls_stmt = $conn->prepare("
+    SELECT d.id AS hall_id, d.name AS hall_name, 
+           SUM(r.slots) AS capacity, 
+           COALESCE(SUM(r.slots - (SELECT COUNT(*) FROM student_list sl WHERE sl.room_id = r.id)), 0) AS available
+    FROM dorm_list d
+    JOIN room_list r ON d.id = r.dorm_id
+    WHERE d.category = ? AND d.status = 1 AND d.delete_flag = 0 
+    AND r.status = 1 AND r.delete_flag = 0
+    GROUP BY d.id, d.name
+");
+$halls_stmt->bind_param("s", $student_type);
+$halls_stmt->execute();
+$halls = $halls_stmt->get_result();
 
 // Get student's bookings
 $booking_stmt = $conn->prepare("
-    SELECT g.*, h.hall_name 
+    SELECT g.*, d.name AS hall_name 
     FROM guest_bookings g
-    JOIN halls h ON g.hall_id = h.hall_id
+    JOIN dorm_list d ON g.hall_id = d.id
     WHERE g.student_id = ?
 ");
 $booking_stmt->bind_param("i", $student_id);
@@ -40,7 +70,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->autocommit(FALSE);
             try {
                 // Check current capacity
-                $hall = $conn->query("SELECT capacity, current_occupancy FROM halls WHERE hall_id = $hall_id")->fetch_assoc();
+                $hall = $conn->query("
+                    SELECT SUM(r.slots) AS capacity, 
+                           COALESCE(SUM(r.slots - (SELECT COUNT(*) FROM student_list sl WHERE sl.room_id = r.id)), 0) AS current_occupancy
+                    FROM room_list r
+                    WHERE r.dorm_id = $hall_id AND r.status = 1 AND r.delete_flag = 0
+                ")->fetch_assoc();
                 
                 // Check date conflicts
                 $conflict_check = $conn->prepare("
@@ -55,8 +90,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $conflict_check->bind_param("issss", $hall_id, $checkout, $checkin, $checkin, $checkout);
                 $conflict_check->execute();
                 $conflict_result = $conflict_check->get_result()->fetch_assoc();
+                $total_guests = $conflict_result['total_guests'] ?? 0;
                 
-                if (($conflict_result['total_guests'] + $num_guests) > $hall['capacity']) {
+                if (($total_guests + $num_guests) > $hall['capacity']) {
                     throw new Exception("Not enough capacity for selected dates");
                 }
 
@@ -68,13 +104,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
                 $stmt->bind_param("iisiss", $student_id, $hall_id, $guest_name, $num_guests, $checkin, $checkout);
                 $stmt->execute();
-                
-                // Update occupancy
-                $conn->query("
-                    UPDATE halls 
-                    SET current_occupancy = current_occupancy + $num_guests 
-                    WHERE hall_id = $hall_id
-                ");
                 
                 $conn->commit();
                 header("Refresh:0"); // Reload page
@@ -92,37 +121,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <title>Student Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         .dashboard-section { margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #dee2e6; border-radius: 0.25rem; }
         .hall-card { margin-bottom: 1rem; }
+        .student-info { background-color: #f8f9fa; padding: 1rem; border-radius: 0.25rem; }
     </style>
 </head>
 <body>
     <div class="container mt-4">
-        <h2>Welcome, <?= $_SESSION['user_name'] ?></h2>
+        <h2>Welcome, <?= htmlspecialchars($_SESSION['user_name']) ?></h2>
         
+        <!-- Student Information -->
+        <div class="dashboard-section student-info">
+            <h3>Your Information</h3>
+            <p><strong>Student Code:</strong> <?= htmlspecialchars($student['code']) ?></p>
+            <p><strong>Student Type:</strong> <?= htmlspecialchars($student['student_type']) ?></p>
+            <p><strong>Department:</strong> <?= htmlspecialchars($student['department']) ?></p>
+            <p><strong>Course:</strong> <?= htmlspecialchars($student['course']) ?></p>
+            <p><strong>Room:</strong> <?= htmlspecialchars($student['dorm_name'] . ' - ' . $student['room_name']) ?></p>
+            <p><strong>Room Price:</strong> $<?= number_format($student['price'], 2) ?></p>
+        </div>
+
         <!-- Hall Availability Check -->
-            <!-- <div class="dashboard-section">
-                <h3>Check Hall Availability</h3>
-                <form id="availabilityForm" class="row g-3">
-                    <div class="col-md-4">
-                        <input type="date" class="form-control" id="checkInDate" required>
-                    </div>
-                    <div class="col-md-4">
-                        <input type="date" class="form-control" id="checkOutDate" required>
-                    </div>
-                    <div class="col-md-4">
-                        <button type="submit" class="btn btn-primary w-100">Check Availability</button>
-                    </div>
-                </form>
-                <div id="availabilityResults" class="mt-3 row"></div>
-            </div> -->
+        <div class="dashboard-section">
+            <h3>Check Hall Availability</h3>
+            <form id="availabilityForm" class="row g-3">
+                <div class="col-md-4">
+                    <input type="date" class="form-control" id="checkInDate" required>
+                </div>
+                <div class="col-md-4">
+                    <input type="date" class="form-control" id="checkOutDate" required>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary w-100">Check Availability</button>
+                </div>
+            </form>
+            <div id="availabilityResults" class="mt-3 row"></div>
+        </div>
 
         <!-- Guest Booking -->
         <div class="dashboard-section">
             <h3>Guest Booking</h3>
-            <?php if(isset($booking_error)): ?>
-                <div class="alert alert-danger"><?= $booking_error ?></div>
+            <?php if (isset($booking_error)): ?>
+                <div class="alert alert-danger"><?= htmlspecialchars($booking_error) ?></div>
             <?php endif; ?>
             
             <form method="POST">
@@ -130,10 +172,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="col-md-4">
                         <select class="form-select" name="hall_id" required>
                             <option value="">Select Hall</option>
-                            <?php while($hall = $halls->fetch_assoc()): ?>
+                            <?php while ($hall = $halls->fetch_assoc()): ?>
                                 <option value="<?= $hall['hall_id'] ?>">
-                                    <?= $hall['hall_name'] ?> 
-                                    (Available: <?= $hall['capacity'] - $hall['current_occupancy'] ?>)
+                                    <?= htmlspecialchars($hall['hall_name']) ?> 
+                                    (Available: <?= $hall['available'] ?>)
                                 </option>
                             <?php endwhile; ?>
                         </select>
@@ -162,10 +204,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mt-4">
                 <h5>Your Bookings (<?= count($bookings) ?>)</h5>
                 <div class="list-group">
-                    <?php foreach($bookings as $booking): ?>
+                    <?php foreach ($bookings as $booking): ?>
                         <div class="list-group-item">
-                            <?= $booking['guest_name'] ?> - 
-                            <?= $booking['hall_name'] ?> 
+                            <?= htmlspecialchars($booking['guest_name']) ?> - 
+                            <?= htmlspecialchars($booking['hall_name']) ?> 
                             (<?= $booking['check_in_date'] ?> to <?= $booking['check_out_date'] ?>)
                         </div>
                     <?php endforeach; ?>
@@ -181,6 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <select class="form-select" name="complaint_type" required>
                         <option value="">Select Type</option>
                         <option value="Hall">Hall Issue</option>
+                        <option value="Hall">Room Issue</option>
                         <option value="Staff">Staff Related</option>
                         <option value="Other">Other</option>
                     </select>
@@ -191,38 +234,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button type="submit" class="btn btn-warning">Submit Complaint</button>
             </form>
         </div>
-    </div>
-    <a href="logout.php">Logout</a>
 
+        <a href="logout.php" class="btn btn-secondary mt-3">Logout</a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     // AJAX for availability check
-    $('#availabilityForm').submit(function(e) {
-        e.preventDefault();
-        $.ajax({
-            url: 'check_availability.php',
-            method: 'POST',
-            data: {
-                checkIn: $('#checkInDate').val(),
-                checkOut: $('#checkOutDate').val()
-            },
-            success: function(response) {
-                let html = '';
-                response.data.forEach(hall => {
-                    html += `
-                        <div class="col-md-4">
-                            <div class="card hall-card">
-                                <div class="card-body">
-                                    <h5>${hall.hall_name}</h5>
-                                    <p>Available: ${hall.available}/${hall.capacity}</p>
-                                    <p>Type: ${hall.hall_type}</p>
-                                </div>
-                            </div>
-                        </div>`;
-                });
-                $('#availabilityResults').html(html || '<div class="col">No available halls</div>');
-            }
+    $(document).ready(function() {
+        $('#availabilityForm').submit(function(e) {
+            e.preventDefault();
+            $.ajax({
+                url: 'check_availability.php',
+                method: 'POST',
+                data: {
+                    checkIn: $('#checkInDate').val(),
+                    checkOut: $('#checkOutDate').val(),
+                    studentType: '<?= $student['student_type'] ?>'
+                },
+                dataType: 'json',
+                success: function(response) {
+                    let html = '';
+                    if (response.data && response.data.length > 0) {
+                        response.data.forEach(hall => {
+                            html += `
+                                <div class="col-md-4">
+                                    <div class="card hall-card">
+                                        <div class="card-body">
+                                            <h5>${hall.hall_name}</h5>
+                                            <p>Available: ${hall.available}/${hall.capacity}</p>
+                                            <p>Type: ${hall.category}</p>
+                                        </div>
+                                    </div>
+                                </div>`;
+                        });
+                    } else {
+                        html = '<div class="col">No available halls</div>';
+                    }
+                    $('#availabilityResults').html(html);
+                },
+                error: function() {
+                    $('#availabilityResults').html('<div class="col">Error checking availability</div>');
+                }
+            });
         });
     });
     </script>
 </body>
 </html>
+<?php
+// Close statements and connection
+$student_stmt->close();
+$halls_stmt->close();
+$booking_stmt->close();
+$conn->close();
+?>

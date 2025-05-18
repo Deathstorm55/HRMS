@@ -38,6 +38,12 @@ if(isset($_GET['id']) && $_GET['id'] > 0){
 								</div>
 								<div class="col-lg-6 col-md-6 col-sm-12 col-xs-12">
 									<div class="form-group">
+										<label for="department" class="control-label">Student Type</label>
+										<input type="text" name="student_type" id="student_type" class="form-control form-control-sm rounded-0" value="<?php echo isset($student_type) ? $student_type : ''; ?>"  required/>
+									</div>
+								</div>
+								<div class="col-lg-6 col-md-6 col-sm-12 col-xs-12">
+									<div class="form-group">
 										<label for="course" class="control-label">Course</label>
 										<input type="text" name="course" id="course" class="form-control form-control-sm rounded-0" value="<?php echo isset($course) ? $course : ''; ?>"  required/>
 									</div>
